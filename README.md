@@ -57,3 +57,41 @@ elo5-server/
 ├── server.js              # Servidor Backend
 └── README.md
 ```
+
+## 🗄️ Modelagem do Banco de Dados
+
+O servidor utiliza SQLite3. Ao rodar o `server.js` pela primeira vez, o arquivo `database.db` é criado com as seguintes tabelas:
+
+### Tabela: `sensores`
+
+| Coluna | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `id` | INTEGER | Chave primária (Autoincremento) |
+| `porta_aberta` | BOOLEAN | 1 se aberta, 0 se fechada |
+| `distancia_cm` | REAL | Distância lida pelo ultrassônico (-1 se fora de alcance) |
+| `pir_movimento` | BOOLEAN | 1 se detectou movimento |
+| `ts_ms` | INTEGER | Timestamp (millis) enviado pelo ESP32 |
+| `data_hora` | DATETIME | Data/Hora em que o servidor salvou o dado |
+
+### Tabela: `acessos_rfid`
+
+| Coluna | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `id` | INTEGER | Chave primária (Autoincremento) |
+| `uid` | TEXT | UID do cartão lido (ex: "01:02:03:04") |
+| `autorizado` | BOOLEAN | 1 se o cartão está na lista permitida |
+| `data_hora` | DATETIME | Data/Hora exata do acesso |
+
+## 🌐 API HTTP (Rotas disponíveis)
+
+O servidor expõe duas rotas para consulta de histórico:
+
+### 1. Buscar Histórico de Sensores
+
+- **Rota:** `GET /api/historico/sensores`
+- **Retorno:** Array JSON com as últimas 50 leituras dos sensores.
+
+### 2. Buscar Histórico de RFID
+
+- **Rota:** `GET /api/historico/rfid`
+- **Retorno:** Array JSON com os últimos 50 acessos de cartões.
