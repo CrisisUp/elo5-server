@@ -1,0 +1,22 @@
+=== ANOTAÇÕES DO PROJETO ELO5 ===
+Data de criação: [05/11/2026]
+
+1. SERVIDOR (Backend + Frontend)
+- Pasta no PC: Desktop/elo5-server
+- Para rodar: Abrir terminal na pasta e digitar "node server.js"
+- Acesso no navegador: http://localhost:3000
+
+2. ESP32 Nº 1 (Sensores)
+- Aba do Wokwi: [Elo00_sensores]
+- Tópico MQTT: elo5-system/sensores/dados
+- Função: Envia porta, PIR e distância a cada 1s. Usa buffer circular e backoff.
+
+3. ESP32 Nº 2 (RFID)
+- Aba do Wokwi: [Elo00_rfid"]
+- Tópico MQTT: elo5-system/rfid/acesso
+- Função: Envia UID dos cartões (Blue e Green autorizados).
+
+4. BROKER MQTT
+- Endereço: broker.hivemq.com
+- Porta: 1883
+- Painel Web: https://www.hivemq.com/demos/websocket-client/ (Host: broker.hivemq.com, Port: 8884, SSL: check)

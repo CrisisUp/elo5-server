@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELO5 - Monitoramento de Sala</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --accent: #3b82f6;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warning: #eab308;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            margin-bottom: 0.5rem;
+            color: var(--accent);
+        }
+
+        p.subtitle {
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1000px;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background-color: var(--card);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border-top: 4px solid var(--accent);
+            transition: transform 0.2s;
+        }
+
+        .card h2 {
+            margin: 0 0 1rem 0;
+            font-size: 1.1rem;
+            color: #cbd5e1;
+        }
+
+        .card .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .status-aberto {
+            color: var(--danger);
+        }
+
+        .status-fechado {
+            color: var(--success);
+        }
+
+        .status-movimento {
+            color: var(--danger);
+        }
+
+        .status-parado {
+            color: var(--success);
+        }
+
+        .status-rfid {
+            color: var(--warning);
+            font-size: 1.8rem !important;
+        }
+
+        .log-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: var(--card);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .log-container h3 {
+            margin-top: 0;
+        }
+
+        .log-box {
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9rem;
+            background: #0f172a;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+
+        .log-item {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 5px;
+        }
+
+        .log-item span {
+            color: #94a3b8;
+            margin-right: 10px;
+        }
+
+        /* Estilos do Toast (Notificação Flutuante) */
+        #toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            transform: translateX(150%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1000;
+        }
+
+        #toast.show {
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            background-color: var(--success);
+        }
+
+        .toast-danger {
+            background-color: var(--danger);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="toast">Teste</div>
+
+    <h1>🛡️ ELO5 - Painel de Monitoramento</h1>
+    <p class="subtitle">Dados recebidos em tempo real do ESP32 (Wokwi)</p>
+
+    <div class="grid">
+        <!-- Card Porta -->
+        <div class="card" id="card-porta">
+            <h2>🚪 Status da Porta</h2>
+            <p class="value" id="val-porta">--</p>
+        </div>
+
+        <!-- Card PIR -->
+        <div class="card" id="card-pir">
+            <h2>👤 Presença (PIR)</h2>
+            <p class="value" id="val-pir">--</p>
+        </div>
+
+        <!-- Card Distância -->
+        <div class="card">
+            <h2>📏 Distância (Ultrassom)</h2>
+            <p class="value" id="val-dist">--</p>
+        </div>
+
+        <!-- Card RFID (Novo) -->
+        <div class="card" style="border-top-color: var(--warning);">
+            <h2>🪪 Último Cartão RFID</h2>
+            <p class="value status-rfid" id="val-rfid">Aguardando...</p>
+        </div>
+    </div>
+
+    <div class="log-container">
+        <h3>📋 Últimos Eventos</h3>
+        <div class="log-box" id="log-box"></div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // Elementos da tela
+        const valPorta = document.getElementById('val-porta');
+        const valPir = document.getElementById('val-pir');
+        const valDist = document.getElementById('val-dist');
+        const valRfid = document.getElementById('val-rfid');
+        const logBox = document.getElementById('log-box');
+        const toast = document.getElementById('toast');
+
+        let toastTimeout;
+
+        // Função para exibir a notificação flutuante
+        function mostrarToast(mensagem, tipo) {
+            toast.textContent = mensagem;
+            toast.className = `show toast-${tipo}`;
+
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.className = '';
+            }, 3000);
+        }
+
+        // Função para adicionar linha no log
+        function adicionarLog(texto) {
+            const agora = new Date().toLocaleTimeString();
+            const logItem = document.createElement('div');
+            logItem.className = 'log-item';
+            logItem.innerHTML = `<span>[${agora}]</span> ${texto}`;
+            logBox.appendChild(logItem);
+            logBox.scrollTop = logBox.scrollHeight;
+            if (logBox.children.length > 50) logBox.removeChild(logBox.firstChild);
+        }
+
+        // --- 1. ESCUTA DE SENSORES ---
+        socket.on('nova_leitura', (dados) => {
+            // Atualiza Porta
+            if (dados.porta_aberta) {
+                valPorta.textContent = 'ABERTA';
+                valPorta.className = 'value status-aberto';
+            } else {
+                valPorta.textContent = 'FECHADA';
+                valPorta.className = 'value status-fechado';
+            }
+
+            // Atualiza PIR
+            if (dados.pir_movimento) {
+                valPir.textContent = 'MOVIMENTO';
+                valPir.className = 'value status-movimento';
+            } else {
+                valPir.textContent = 'SEM MOVIMENTO';
+                valPir.className = 'value status-parado';
+            }
+
+            // Atualiza Distância
+            if (dados.distancia_cm === null || dados.distancia_cm < 0) {
+                valDist.textContent = 'Fora de Alcance';
+                valDist.style.fontSize = '1.5rem';
+            } else {
+                valDist.textContent = `${dados.distancia_cm.toFixed(1)} cm`;
+                valDist.style.fontSize = '2.5rem';
+            }
+
+            // Log de sensores (apenas se a porta mudou, para não poluir muito)
+            // Como o heartbeat é de 1s, adicionamos ao log a cada 5 segundos para ficar legível
+            const agora = new Date().getTime();
+            if (!window.ultimoLogSensor || agora - window.ultimoLogSensor > 5000) {
+                const statusPorta = dados.porta_aberta ? '🔴 Porta Aberta' : '🟢 Porta Fechada';
+                const statusPir = dados.pir_movimento ? '🔴 Movimento' : '🟢 Sem Mov';
+                const dist = dados.distancia_cm ? `${dados.distancia_cm}cm` : 'N/A';
+                adicionarLog(`${statusPorta} | ${statusPir} | Distância: ${dist}`);
+                window.ultimoLogSensor = agora;
+            }
+        });
+
+        // --- 2. ESCUTA DE RFID (Novo) ---
+        socket.on('acesso_rfid', (dados) => {
+            valRfid.textContent = dados.uid;
+
+            if (dados.autorizado) {
+                valRfid.style.color = 'var(--success)';
+                mostrarToast(`✅ Acesso Liberado: ${dados.uid}`, 'success');
+                adicionarLog(`🪪 <span style="color:var(--success)">RFID AUTORIZADO:</span> ${dados.uid}`);
+            } else {
+                valRfid.style.color = 'var(--danger)';
+                mostrarToast(`❌ Acesso Negado: ${dados.uid}`, 'danger');
+                adicionarLog(`🪪 <span style="color:var(--danger)">RFID NEGADO:</span> ${dados.uid}`);
+            }
+        });
+
+        // --- 3. CARREGAR HISTÓRICOS AO ABRIR A PÁGINA ---
+        Promise.all([
+            fetch('/api/historico/sensores').then(res => res.json()),
+            fetch('/api/historico/rfid').then(res => res.json())
+        ]).then(([historicoSensores, historicoRfid]) => {
+            // Carrega últimos sensores
+            historicoSensores.slice(-5).forEach(dados => {
+                const statusPorta = dados.porta_aberta ? '🔴 Porta Aberta' : '🟢 Porta Fechada';
+                adicionarLog(`${statusPorta} | Distância: ${dados.distancia_cm}cm (histórico)`);
+            });
+            // Carrega últimos cartões
+            historicoRfid.slice(-5).forEach(dados => {
+                const status = dados.autorizado ? 'AUTORIZADO' : 'NEGADO';
+                adicionarLog(`🪪 RFID: ${dados.uid} (${status}) (histórico)`);
+            });
+        });
+
+    </script>
+</body>
+
+</html>
